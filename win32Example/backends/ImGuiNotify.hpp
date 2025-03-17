@@ -109,11 +109,12 @@ private:
     char										title[NOTIFY_MAX_MSG_LENGTH];
     char										content[NOTIFY_MAX_MSG_LENGTH];
 
-    int											dismissTime = NOTIFY_DEFAULT_DISMISS;
+    int											dismissTime = 0;
     std::chrono::system_clock::time_point		creationTime = std::chrono::system_clock::now();
 
     std::function<void()>						onButtonPress = nullptr; // A lambda variable, which will be executed when button in notification is pressed
     char 										buttonLabel[NOTIFY_MAX_MSG_LENGTH];
+	nos::uuid MessageId;
 
 private:
     // Setters
@@ -333,21 +334,26 @@ public:
     {
         const int64_t elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(getElapsedTime()).count();
 
-        if (elapsed > NOTIFY_FADE_IN_OUT_TIME + this->dismissTime + NOTIFY_FADE_IN_OUT_TIME)
-        {
-            return ImGuiToastPhase::Expired;
-        } else 
-        if (elapsed > NOTIFY_FADE_IN_OUT_TIME + this->dismissTime)
-        {
-            return ImGuiToastPhase::FadeOut;
-        } else 
-        if (elapsed > NOTIFY_FADE_IN_OUT_TIME)
-        {
-            return ImGuiToastPhase::Wait;
-        } else
-        {
-            return ImGuiToastPhase::FadeIn;
-        }
+        if (this->dismissTime)
+		{
+			if (elapsed > NOTIFY_FADE_IN_OUT_TIME + this->dismissTime + NOTIFY_FADE_IN_OUT_TIME)
+			{
+				return ImGuiToastPhase::Expired;
+			}
+			else if (elapsed > NOTIFY_FADE_IN_OUT_TIME + this->dismissTime)
+			{
+				return ImGuiToastPhase::FadeOut;
+			}
+			else if (elapsed > NOTIFY_FADE_IN_OUT_TIME)
+			{
+				return ImGuiToastPhase::Wait;
+			}
+			else
+			{
+				return ImGuiToastPhase::FadeIn;
+			}
+		}
+		return ImGuiToastPhase::Wait;
     }
 
     /**
@@ -370,6 +376,8 @@ public:
 
         return 1.f * NOTIFY_OPACITY;
     }
+
+    bool IsPermanent() { return dismissTime == 0; }
 
     /**
      * @return ImGui window flags for the notification.
@@ -395,6 +403,8 @@ public:
         return this->buttonLabel;
     }
 
+    nos::uuid GetId() const { return MessageId; }
+
 public:
     // Constructors
 
@@ -402,9 +412,9 @@ public:
      * @brief Creates a new ImGuiToast object with the specified type and dismiss time.
      * 
      * @param type The type of the toast.
-     * @param dismissTime The time in milliseconds after which the toast should be dismissed. Default is NOTIFY_DEFAULT_DISMISS.
+     * @param dismissTime The time in milliseconds after which the toast should be dismissed. Default is 0, meaning permanent.
      */
-    ImGuiToast(ImGuiToastType type, int dismissTime = NOTIFY_DEFAULT_DISMISS)
+    ImGuiToast(ImGuiToastType type, nos::uuid id, int dismissTime = 0)
     {
         IM_ASSERT(type < ImGuiToastType::COUNT);
 
@@ -424,7 +434,7 @@ public:
      * @param format The format string for the message.
      * @param ... The variable arguments to be formatted according to the format string.
      */
-    ImGuiToast(ImGuiToastType type, const char* format, ...) : ImGuiToast(type)
+	ImGuiToast(ImGuiToastType type, nos::uuid id, const char* format, ...) : ImGuiToast(type, id)
     {
         NOTIFY_FORMAT(this->setContent, format);
     }
@@ -437,7 +447,8 @@ public:
      * @param format The format string for the content of the toast message.
      * @param ... The variable arguments to be formatted according to the format string.
      */
-    ImGuiToast(ImGuiToastType type, int dismissTime, const char* format, ...) : ImGuiToast(type, dismissTime)
+	ImGuiToast(ImGuiToastType type, nos::uuid id, int dismissTime, const char* format, ...)
+		: ImGuiToast(type, id, dismissTime)
     {
         NOTIFY_FORMAT(this->setContent, format);
     }
@@ -452,7 +463,14 @@ public:
      * @param format The format string for the content of the toast message.
      * @param ... The variable arguments to be formatted according to the format string.
      */
-    ImGuiToast(ImGuiToastType type, int dismissTime, const char* buttonLabel, const std::function<void()>& onButtonPress, const char* format, ...) : ImGuiToast(type, dismissTime)
+	ImGuiToast(ImGuiToastType type,
+			   nos::uuid id,
+			   int dismissTime,
+			   const char* buttonLabel,
+			   const std::function<void()>& onButtonPress,
+			   const char* format,
+			   ...)
+		: ImGuiToast(type, id, dismissTime)
     {
         NOTIFY_FORMAT(this->setContent, format);
 
@@ -483,6 +501,20 @@ namespace ImGui
     {
         notifications.erase(notifications.begin() + index);
     }
+
+	/**
+	 * @brief Removes a notification from the list of notifications.
+	 *
+	 * @param index The index of the notification to remove.
+	 */
+	inline void RemoveNotification(nos::uuid id)
+	{
+		std::erase_if(notifications, [id](ImGuiToast const& toast) -> bool {
+			if (toast.GetId() == id)
+				return true;
+			return false;
+		});
+	}
 
     /**
      * Renders all notifications in the notifications vector.
@@ -598,7 +630,7 @@ namespace ImGui
                 }
 
                 // If a dismiss button is enabled
-                if (NOTIFY_USE_DISMISS_BUTTON)
+				if (NOTIFY_USE_DISMISS_BUTTON && !currentToast->IsPermanent())
                 {
                     // If a title or content is set, we want to render the button on the same line
                     if (wasTitleRendered || !NOTIFY_NULL_OR_EMPTY(content))
