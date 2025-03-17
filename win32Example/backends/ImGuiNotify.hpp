@@ -414,7 +414,7 @@ public:
      * @param type The type of the toast.
      * @param dismissTime The time in milliseconds after which the toast should be dismissed. Default is 0, meaning permanent.
      */
-    ImGuiToast(ImGuiToastType type, nos::uuid id, int dismissTime = 0)
+	ImGuiToast(ImGuiToastType type, nos::uuid id, int dismissTime = 0) : MessageId(id)
     {
         IM_ASSERT(type < ImGuiToastType::COUNT);
 
