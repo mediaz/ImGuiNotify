@@ -110,6 +110,7 @@ private:
     char										content[NOTIFY_MAX_MSG_LENGTH];
 
     int											dismissTime = 0;
+	bool                                        Dismissable = true;
     std::chrono::system_clock::time_point		creationTime = std::chrono::system_clock::now();
 
     std::function<void()>						onButtonPress = nullptr; // A lambda variable, which will be executed when button in notification is pressed
@@ -199,6 +200,8 @@ public:
     {
         NOTIFY_FORMAT(this->setButtonLabel, format);
     }
+
+    inline void SetDismissable(bool dismissable) { this->Dismissable = dismissable; }
 
 public:
     // Getters
@@ -377,7 +380,7 @@ public:
         return 1.f * NOTIFY_OPACITY;
     }
 
-    bool IsPermanent() { return dismissTime == 0; }
+    bool IsDismissable() { return Dismissable; }
 
     /**
      * @return ImGui window flags for the notification.
@@ -630,7 +633,7 @@ namespace ImGui
                 }
 
                 // If a dismiss button is enabled
-				if (NOTIFY_USE_DISMISS_BUTTON && !currentToast->IsPermanent())
+				if (NOTIFY_USE_DISMISS_BUTTON && currentToast->IsDismissable())
                 {
                     // If a title or content is set, we want to render the button on the same line
                     if (wasTitleRendered || !NOTIFY_NULL_OR_EMPTY(content))
